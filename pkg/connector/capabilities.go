@@ -74,8 +74,7 @@ func capID() string {
 const MaxTextLength = 2000
 
 // TODO: This limit is increased depending on user subscription status (Discord Nitro).
-// TODO: Verify this figure (10 MiB).
-const MaxFileSize = 10485760
+const MaxFileSize = 30 * 1024 * 1024
 
 var discordCaps = &event.RoomFeatures{
 	ID:       capID(),
