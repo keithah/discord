@@ -21,12 +21,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/bwmarrin/discordgo"
@@ -39,7 +37,6 @@ import (
 )
 
 const relayWebhookName = "mau bridge"
-const relayWebhookTransientMaxAttempts = 3
 
 var discordWebhookUsernameWord = regexp.MustCompile(`(?i)discord`)
 
@@ -98,27 +95,9 @@ func (d *DiscordClient) executeRelayWebhookWithTransientRetry(
 	threadID string,
 	params *discordgo.WebhookParams,
 ) (*discordgo.Message, error) {
-	var err error
-	var sentMsg *discordgo.Message
-	for attempt := 1; attempt <= relayWebhookTransientMaxAttempts; attempt++ {
-		sentMsg, err = d.Session.WebhookThreadExecute(webhookID, webhookToken, true, threadID, params, discordgo.WithContext(ctx))
-		if err == nil || !isTransientRelayWebhookError(err) || attempt == relayWebhookTransientMaxAttempts {
-			return sentMsg, err
-		}
-		backoff := time.Duration(attempt) * time.Second
-		zerolog.Ctx(ctx).Warn().
-			Err(err).
-			Int("attempt", attempt).
-			Int("max_attempts", relayWebhookTransientMaxAttempts).
-			Dur("retry_after", backoff).
-			Msg("Relay webhook send hit transient network error, retrying")
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(backoff):
-		}
-	}
-	return sentMsg, err
+	return executeWithTransientRetry(ctx, discordTransientRetryMaxAttempts, "Relay webhook send hit transient network/API error, retrying", func() (*discordgo.Message, error) {
+		return d.Session.WebhookThreadExecute(webhookID, webhookToken, true, threadID, params, discordgo.WithContext(ctx))
+	}, isTransientDiscordRESTError)
 }
 
 func (d *DiscordClient) getRelayWebhook(ctx context.Context, portal *bridgev2.Portal, channelID string, refererOpt discordgo.RequestOption) (id, token string, err error) {
@@ -173,22 +152,7 @@ func isStaleWebhookError(err error) bool {
 }
 
 func isTransientRelayWebhookError(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-
-	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) {
-		return true
-	}
-
-	var opErr *net.OpError
-	if errors.As(err, &opErr) && opErr.Op == "dial" {
-		return true
-	}
-
-	var netErr net.Error
-	return errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary())
+	return isTransientDiscordRESTError(err)
 }
 
 func (d *DiscordClient) relayWebhookProfile(ctx context.Context, portal *bridgev2.Portal, sender *bridgev2.OrigSender) (username, avatarURL string) {

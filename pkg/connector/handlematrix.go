@@ -180,7 +180,9 @@ func (d *DiscordClient) HandleMatrixMessage(ctx context.Context, msg *bridgev2.M
 		}
 		sentMsg, err = d.executeRelayWebhook(ctx, portal, parentChannelID, threadChannelID, params, refererOpt)
 	} else {
-		sentMsg, err = d.Session.ChannelMessageSendComplex(channelID, sendReq, refererOpt, discordgo.WithContext(ctx))
+		sentMsg, err = executeWithTransientRetry(ctx, discordTransientRetryMaxAttempts, "Discord message send hit transient network/API error, retrying", func() (*discordgo.Message, error) {
+			return d.Session.ChannelMessageSendComplex(channelID, sendReq, refererOpt, discordgo.WithContext(ctx))
+		}, isTransientDiscordRESTError)
 	}
 	if err != nil {
 		return nil, d.tryWrappingError(ctx, err)
@@ -298,12 +300,15 @@ func (d *DiscordClient) HandleMatrixEdit(ctx context.Context, msg *bridgev2.Matr
 		return nil
 	}
 
-	_, err := d.Session.ChannelMessageEdit(
-		channelID,
-		discordid.ParseMessageID(msg.EditTarget.ID),
-		content,
-		makeDiscordReferer(guildID, parentChannelID, threadChannelID),
-	)
+	_, err := executeWithTransientRetry(ctx, discordTransientRetryMaxAttempts, "Discord message edit hit transient network/API error, retrying", func() (struct{}, error) {
+		_, err := d.Session.ChannelMessageEdit(
+			channelID,
+			discordid.ParseMessageID(msg.EditTarget.ID),
+			content,
+			makeDiscordReferer(guildID, parentChannelID, threadChannelID),
+		)
+		return struct{}{}, err
+	}, isTransientDiscordRESTError)
 	if err != nil {
 		return d.tryWrappingError(ctx, err)
 	}
@@ -363,13 +368,16 @@ func (d *DiscordClient) HandleMatrixReaction(ctx context.Context, reaction *brid
 		}
 	}
 
-	return nil, d.tryWrappingError(ctx, d.Session.MessageReactionAddUser(
-		meta.GuildID,
-		channelID,
-		discordid.ParseMessageID(reaction.TargetMessage.ID),
-		discordid.ParseEmojiID(reaction.PreHandleResp.EmojiID),
-		makeDiscordReferer(meta.GuildID, parentChannelID, threadChannelID),
-	))
+	_, err := executeWithTransientRetry(ctx, discordTransientRetryMaxAttempts, "Discord reaction add hit transient network/API error, retrying", func() (struct{}, error) {
+		return struct{}{}, d.Session.MessageReactionAddUser(
+			meta.GuildID,
+			channelID,
+			discordid.ParseMessageID(reaction.TargetMessage.ID),
+			discordid.ParseEmojiID(reaction.PreHandleResp.EmojiID),
+			makeDiscordReferer(meta.GuildID, parentChannelID, threadChannelID),
+		)
+	}, isTransientDiscordRESTError)
+	return nil, d.tryWrappingError(ctx, err)
 }
 
 func (d *DiscordClient) HandleMatrixReactionRemove(ctx context.Context, removal *bridgev2.MatrixReactionRemove) error {
@@ -397,14 +405,17 @@ func (d *DiscordClient) HandleMatrixReactionRemove(ctx context.Context, removal 
 		}
 	}
 
-	return d.tryWrappingError(ctx, d.Session.MessageReactionRemoveUser(
-		guildID,
-		channelID,
-		discordid.ParseMessageID(removing.MessageID),
-		discordid.ParseEmojiID(emojiID),
-		discordid.ParseUserLoginID(d.UserLogin.ID),
-		makeDiscordReferer(guildID, parentChannelID, threadChannelID),
-	))
+	_, err = executeWithTransientRetry(ctx, discordTransientRetryMaxAttempts, "Discord reaction remove hit transient network/API error, retrying", func() (struct{}, error) {
+		return struct{}{}, d.Session.MessageReactionRemoveUser(
+			guildID,
+			channelID,
+			discordid.ParseMessageID(removing.MessageID),
+			discordid.ParseEmojiID(emojiID),
+			discordid.ParseUserLoginID(d.UserLogin.ID),
+			makeDiscordReferer(guildID, parentChannelID, threadChannelID),
+		)
+	}, isTransientDiscordRESTError)
+	return d.tryWrappingError(ctx, err)
 }
 
 func (d *DiscordClient) HandleMatrixMessageRemove(ctx context.Context, removal *bridgev2.MatrixMessageRemove) error {
@@ -439,7 +450,10 @@ func (d *DiscordClient) HandleMatrixMessageRemove(ctx context.Context, removal *
 			threadChannelID,
 		))
 	}
-	return d.tryWrappingError(ctx, d.Session.ChannelMessageDelete(channelID, messageID, makeDiscordReferer(guildID, parentChannelID, threadChannelID)))
+	_, err := executeWithTransientRetry(ctx, discordTransientRetryMaxAttempts, "Discord message delete hit transient network/API error, retrying", func() (struct{}, error) {
+		return struct{}{}, d.Session.ChannelMessageDelete(channelID, messageID, makeDiscordReferer(guildID, parentChannelID, threadChannelID))
+	}, isTransientDiscordRESTError)
+	return d.tryWrappingError(ctx, err)
 }
 
 func (d *DiscordClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridgev2.MatrixReadReceipt) error {
