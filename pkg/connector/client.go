@@ -80,6 +80,8 @@ type DiscordClient struct {
 
 	lastSendAttemptMutex sync.Mutex
 	lastSendAttempt      *SendAttempt
+
+	gatewayReconnectThrottle reconnectThrottle
 }
 
 func (d *DiscordConnector) LoadUserLogin(ctx context.Context, login *bridgev2.UserLogin) error {
@@ -115,6 +117,15 @@ func (d *DiscordConnector) LoadUserLogin(ctx context.Context, login *bridgev2.Us
 		session.RESTResponseHook = cl.tapDiscordRESTResponse
 		session.BeforeReconnect = func(*discordgo.Session) {
 			c := login.Client.(*DiscordClient)
+			delay := c.gatewayReconnectThrottle.Next()
+			c.UserLogin.Log.Warn().
+				Dur("retry_sleeping_seconds", delay).
+				Msg("Throttling Discord gateway reconnect")
+			select {
+			case <-time.After(delay):
+			case <-c.connector.Bridge.BackgroundCtx.Done():
+				return
+			}
 			if c.connector.proxyConfigured() && !c.updateProxy(c.connector.Bridge.BackgroundCtx, "reconnect") {
 				// Failed to update the proxy. Continue reconnecting via the
 				// last good proxy, but report the failure.

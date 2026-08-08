@@ -788,6 +788,7 @@ func (d *DiscordClient) handleDiscordStateEvent(rawEvt any) {
 			Msg("Received supplemental READY")
 	case *discordgo.Ready:
 		wasSeen := d.seenReady.Swap(true)
+		d.gatewayReconnectThrottle.Reset()
 
 		d.applyReadyPayload(ctx, evt)
 
