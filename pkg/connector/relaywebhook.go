@@ -161,7 +161,7 @@ func (d *DiscordClient) relayWebhookProfile(ctx context.Context, portal *bridgev
 	if sender.User != nil {
 		if login, _, err := portal.FindPreferredLogin(ctx, sender.User, false); err != nil {
 			zerolog.Ctx(ctx).Debug().Err(err).Stringer("sender_mxid", sender.UserID).Msg("No explicit Discord login for relayed sender in portal")
-		} else if login != nil {
+		} else if login != nil && !isPortalRelayLogin(portal, login) {
 			if user := d.userCache.Resolve(ctx, discordid.ParseUserLoginID(login.ID)); user != nil {
 				log.Debug().
 					Stringer("sender_mxid", sender.UserID).
@@ -198,6 +198,10 @@ func (d *DiscordClient) relayWebhookProfile(ctx context.Context, portal *bridgev
 		Str("display_name", username).
 		Msg("Falling back to Matrix relay webhook profile")
 	return username, ""
+}
+
+func isPortalRelayLogin(portal *bridgev2.Portal, login *bridgev2.UserLogin) bool {
+	return portal != nil && portal.Relay != nil && login != nil && portal.Relay.ID == login.ID
 }
 
 func sanitizeRelayWebhookUsername(username, fallback string) string {

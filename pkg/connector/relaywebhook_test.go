@@ -10,6 +10,9 @@ import (
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
+	"maunium.net/go/mautrix/bridgev2"
+	"maunium.net/go/mautrix/bridgev2/database"
+	"maunium.net/go/mautrix/bridgev2/networkid"
 )
 
 func TestChooseRelayWebhookGhostMatch(t *testing.T) {
@@ -275,3 +278,15 @@ func (timeoutErr) Timeout() bool   { return true }
 func (timeoutErr) Temporary() bool { return true }
 
 var _ net.Error = timeoutErr{}
+
+func TestIsPortalRelayLogin(t *testing.T) {
+	relay := &bridgev2.UserLogin{UserLogin: &database.UserLogin{ID: networkid.UserLoginID("relay")}}
+	portal := &bridgev2.Portal{Relay: relay}
+
+	if !isPortalRelayLogin(portal, relay) {
+		t.Fatal("relay login was not detected")
+	}
+	if isPortalRelayLogin(portal, &bridgev2.UserLogin{UserLogin: &database.UserLogin{ID: networkid.UserLoginID("other")}}) {
+		t.Fatal("non-relay login was detected as relay")
+	}
+}
