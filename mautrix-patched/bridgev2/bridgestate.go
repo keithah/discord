@@ -258,6 +258,7 @@ func (bsq *BridgeStateQueue) immediateSendBridgeState(state status.BridgeState) 
 			Msg("Not sending bridge state as it's a duplicate")
 		return
 	}
+	wasConnected := bsq.GetPrev().StateEvent == status.StateConnected
 	if state.StateEvent == status.StateUnknownError {
 		go bsq.unknownErrorReconnect(state)
 	}
@@ -281,12 +282,37 @@ func (bsq *BridgeStateQueue) immediateSendBridgeState(state status.BridgeState) 
 				retryIn = 64
 			}
 		} else {
+			if state.StateEvent == status.StateConnected && !wasConnected {
+				bsq.sendConnectedMessage(ctx, state)
+			}
 			bsq.prevSent = &state
 			bsq.login.Log.Debug().
 				Any("bridge_state", state).
 				Msg("Sent new bridge state")
 			return
 		}
+	}
+}
+
+func (bsq *BridgeStateQueue) sendConnectedMessage(ctx context.Context, state status.BridgeState) {
+	managementRoom, err := bsq.login.User.GetManagementRoom(ctx)
+	if err != nil {
+		bsq.login.Log.Err(err).Msg("Failed to get management room for connected message")
+		return
+	}
+	name := bsq.login.RemoteName
+	if name == "" {
+		name = fmt.Sprintf("`%s`", bsq.login.ID)
+	}
+	message := fmt.Sprintf("%s is connected.", name)
+	if state.Message != "" {
+		message += fmt.Sprintf(" %s", state.Message)
+	}
+	_, err = bsq.bridge.Bot.SendMessage(ctx, managementRoom, event.EventMessage, &event.Content{
+		Parsed: format.RenderMarkdown(message, true, false),
+	}, nil)
+	if err != nil {
+		bsq.login.Log.Err(err).Msg("Failed to send connected message")
 	}
 }
 

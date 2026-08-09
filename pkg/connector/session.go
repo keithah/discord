@@ -35,6 +35,16 @@ func NewDiscordSession(ctx context.Context, settings exhttp.ClientSettings, toke
 	if err != nil {
 		return nil, fmt.Errorf("couldn't create discord session: %w", err)
 	}
+	if !session.IsUser {
+		session.Identify.Intents = discordgo.IntentGuilds |
+			discordgo.IntentGuildMessages |
+			discordgo.IntentGuildMessageReactions |
+			discordgo.IntentGuildMessageTyping |
+			discordgo.IntentDirectMessages |
+			discordgo.IntentDirectMessageReactions |
+			discordgo.IntentDirectMessageTyping |
+			discordgo.IntentMessageContent
+	}
 
 	// Cloak sessions regardless of proxy.
 	if err := discordtransport.ApplyToSession(session, settings); err != nil {

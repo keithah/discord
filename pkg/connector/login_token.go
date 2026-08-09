@@ -19,11 +19,16 @@ package connector
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"maunium.net/go/mautrix/bridgev2"
 )
 
-const LoginFlowIDToken = "DEBUG_USERINPUT_token"
+const LoginFlowIDToken = "token"
+
+func normalizeDiscordLoginToken(token string) string {
+	return strings.TrimSpace(token)
+}
 
 type DiscordTokenLogin struct {
 	*DiscordGenericLogin
@@ -40,9 +45,8 @@ func (dl *DiscordTokenLogin) Start(ctx context.Context) (*bridgev2.LoginStep, er
 				{
 					Type: bridgev2.LoginInputFieldTypePassword,
 					ID:   "token",
-					Name: "Discord user account token",
-					// Cribbed from https://regex101.com/r/1GMR0y/1.
-					Pattern: `^(mfa\.[a-zA-Z0-9_-]{20,})|([a-zA-Z0-9_-]{23,}\.[a-zA-Z0-9_-]{6,7}\.[a-zA-Z0-9_-]{27,})$`,
+					Name: "Discord user or bot token",
+					Pattern: `^(Bot )?(mfa\.[a-zA-Z0-9_-]{20,}|[a-zA-Z0-9_-]{23,}\.[a-zA-Z0-9_-]{6,7}\.[a-zA-Z0-9_-]{27,})$`,
 				},
 			},
 		},
@@ -54,6 +58,7 @@ func (dl *DiscordTokenLogin) SubmitUserInput(ctx context.Context, input map[stri
 	if token == "" {
 		return nil, fmt.Errorf("no token provided")
 	}
+	token = normalizeDiscordLoginToken(token)
 
 	ul, err := dl.FinalizeCreatingLogin(ctx, token)
 	if err != nil {

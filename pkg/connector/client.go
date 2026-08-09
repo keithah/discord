@@ -165,13 +165,15 @@ func (d *DiscordClient) Connect(ctx context.Context) {
 		return
 	}
 
-	meta := d.userLoginMetadata()
-	if meta.HeartbeatSession.IsExpired() {
-		log.Info().Msg("Heartbeat session expired, creating a new one")
-		meta.HeartbeatSession = discordgo.NewHeartbeatSession()
+	if d.Session.IsUser {
+		meta := d.userLoginMetadata()
+		if meta.HeartbeatSession.IsExpired() {
+			log.Info().Msg("Heartbeat session expired, creating a new one")
+			meta.HeartbeatSession = discordgo.NewHeartbeatSession()
+		}
+		meta.HeartbeatSession.BumpLastUsed()
+		d.Session.HeartbeatSession = meta.HeartbeatSession
 	}
-	meta.HeartbeatSession.BumpLastUsed()
-	d.Session.HeartbeatSession = meta.HeartbeatSession
 
 	d.markedOpened = make(map[string]time.Time)
 
@@ -870,6 +872,11 @@ func (d *DiscordClient) syncGuild(ctx context.Context, guildID string) error {
 
 func (d *DiscordClient) subscribeGuild(ctx context.Context, guildID string) {
 	log := zerolog.Ctx(ctx)
+
+	if !d.Session.IsUser {
+		log.Debug().Msg("Skipping guild subscription for bot session")
+		return
+	}
 
 	log.Debug().Msg("Subscribing to guild")
 	err := d.Session.SubscribeGuild(discordgo.GuildSubscribeData{

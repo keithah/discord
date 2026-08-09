@@ -778,11 +778,12 @@ func (portal *Portal) handleMatrixEvent(ctx context.Context, sender *User, evt *
 	if err != nil {
 		log.Err(err).Msg("Failed to get user login to handle Matrix event")
 		if errors.Is(err, ErrNotLoggedIn) {
-			shouldSendNotice := evt.Type == event.EventMessage && evt.Content.AsMessage().MsgType != event.MsgNotice
-			return EventHandlingResultFailed.WithMSSError(WrapErrorInStatus(err).
+			status := WrapErrorInStatus(err).
 				WithMessage(fmt.Sprintf("You're %s", err)).
 				WithIsCertain(true).
-				WithSendNotice(shouldSendNotice))
+				WithSendNotice(false)
+			status.DisableMSS = true
+			return EventHandlingResultFailed.WithMSSError(status)
 		} else {
 			return EventHandlingResultFailed.WithMSSError(
 				WrapErrorInStatus(err).WithMessage("Failed to get login to handle event").WithIsCertain(true).WithSendNotice(true),
