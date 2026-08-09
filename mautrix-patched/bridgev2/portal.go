@@ -684,6 +684,9 @@ func (portal *Portal) FindPreferredLogin(ctx context.Context, user *User, allowR
 	for _, up := range logins {
 		login, ok := user.logins[up.LoginID]
 		if ok && login.Client != nil && login.Client.IsLoggedIn() {
+			if allowRelay && shouldSkipLoginForRelayMode(login, portal.Relay) {
+				continue
+			}
 			return login, up, nil
 		}
 	}
@@ -712,6 +715,10 @@ func (portal *Portal) FindPreferredLogin(ctx context.Context, user *User, allowR
 	} else {
 		return nil, nil, fmt.Errorf("%w (no usable logins found)", ErrNotLoggedIn)
 	}
+}
+
+func shouldSkipLoginForRelayMode(login, relay *UserLogin) bool {
+	return login != nil && relay != nil && login.ID == relay.ID
 }
 
 func (portal *Portal) sendSuccessStatus(ctx context.Context, evt *event.Event, streamOrder int64, newEventID id.EventID) {
