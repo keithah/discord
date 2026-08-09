@@ -465,6 +465,11 @@ func (d *DiscordClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridge
 		Str("event_id", string(msg.EventID)).
 		Str("action", "matrix read receipt").Logger()
 
+	if !d.shouldBridgeMatrixReadReceipts() {
+		log.Debug().Msg("Dropping read receipt for bot session")
+		return nil
+	}
+
 	guildID := msg.Portal.Metadata.(*discordid.PortalMetadata).GuildID
 	parentChannelID := discordid.ParseChannelPortalID(msg.Portal.ID)
 	threadChannelID := ""
@@ -587,6 +592,10 @@ func (d *DiscordClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridge
 	}
 
 	return nil
+}
+
+func (d *DiscordClient) shouldBridgeMatrixReadReceipts() bool {
+	return d.Session != nil && d.Session.IsUser
 }
 
 func (d *DiscordClient) viewingChannel(ctx context.Context, portal *bridgev2.Portal) error {
